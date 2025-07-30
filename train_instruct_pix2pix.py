@@ -33,6 +33,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from torchvision import transforms
+import torchvision.transforms.functional as TF
+import random
+
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -625,14 +629,14 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     if args.dataset_name is not None:
-        # Dataset da Hugging Face hub
+        # Dataset from Hugging Face hub
         dataset = load_dataset(
             args.dataset_name,
             args.dataset_config_name,
             cache_dir=args.cache_dir,
         )
     else:
-        # Caricamento del dataset locale dal file JSONL
+        # Loading of a local dataset with the JSON NOTE: Edited by Luca Conti
         features = Features({
             "input_image": Image(),
             "edit_prompt": Value("string"),
@@ -695,6 +699,25 @@ def main():
             transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
         ]
     )
+
+    # Preprocessing the datasets.
+    # train_transforms = transforms.Compose(
+    #     [
+    #         transforms.CenterCrop(args.resolution) if args.center_crop else transforms.RandomCrop(args.resolution),
+    #         transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
+    #     ]
+    # )       
+    # NOTE: edited by Luca Conti, July 2025
+    train_transforms = transforms.Compose([
+        transforms.Lambda(
+            lambda img: TF.resize(
+                img,
+                size=random.randint(args.resolution, int(args.resolution * 1.125))
+            )
+        ),
+        transforms.CenterCrop(args.resolution) if args.center_crop else transforms.RandomCrop(args.resolution),
+        transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x)
+    ])
 
     def preprocess_images(examples):
         original_images = np.concatenate(
