@@ -44,8 +44,6 @@ from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
-from datasets import load_dataset, Features, Value, Image
-
 import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionInstructPix2PixPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
@@ -625,25 +623,20 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     if args.dataset_name is not None:
-        # Dataset da Hugging Face hub
+        # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
             args.dataset_name,
             args.dataset_config_name,
             cache_dir=args.cache_dir,
         )
     else:
-        # Caricamento del dataset locale dal file JSONL
-        features = Features({
-            "input_image": Image(),
-            "edit_prompt": Value("string"),
-            "edited_image": Image()
-        })
-
+        data_files = {}
+        if args.train_data_dir is not None:
+            data_files["train"] = os.path.join(args.train_data_dir, "**")
         dataset = load_dataset(
-            "json",
-            data_files={"train": os.path.join(args.train_data_dir, "metadata.jsonl")},
-            features=features,
-            cache_dir=args.cache_dir
+            "imagefolder",
+            data_files=data_files,
+            cache_dir=args.cache_dir,
         )
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/main/en/image_load#imagefolder
