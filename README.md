@@ -5,8 +5,8 @@
 # !!STILL WORK IN PROGRESS!!
 
 ## Authors
-*   **Luca Conti** (ID: 1702084)
-*   **Daniele sabatini** (ID: 1890300)
+*   [**Luca Conti**](https://github.com/iamlucaconti/) (ID: 1702084)
+*   [**Daniele sabatini**](https://github.com/danilsab24/) (ID: 1890300)
 
 
 ## Project aim and selected paper
@@ -59,6 +59,12 @@ For fine-tuning, we built a dataset of **800 samples**:
 - **400 samples from existing data**:  
   Taken directly from the [**InstructPix2Pix training dataset**](https://huggingface.co/datasets/timbrooks/instructpix2pix-clip-filtered), as used in the original paper.
 
+
+The dataset used for fine-tuning Gemma 2B is available at:
+ ```
+ ./datasets/txt_dataset_finetuning.jsonl
+ ```
+
 Using the fine-tuned LLM, we then prepared the paired caption dataset for the second stage of the project:
 
 - **2,900 samples** from [**visual-layer/imagenet-1k-vl-enriched**](https://huggingface.co/datasets/visual-layer/imagenet-1k-vl-enriched).  
@@ -68,13 +74,18 @@ Using the fine-tuned LLM, we then prepared the paired caption dataset for the se
   Added to further enrich the dataset.
 
 
+We provide our generated dataset of captions and edit instructions in:
+ ```
+ ./datasets/generated_txt_dataset.jsonl
+ ```
+
 ## 2. Generating Paired Images from Paired Captions
 
 >To generate a dataset of paired images from paired captions, run the notebook **`generate_img_dataset.ipynb`** and edit the variables in the corresponding section.
 
 To generate the original images, we used the Stable Diffusion model `runwayml/stable-diffusion-v1-5`.  
 Image editing is guided by `lllyasviel/sd-controlnet-canny`, which uses the source image structure (Canny edges) along with the target prompt to produce controlled edits.  
->**Notes**  
+>**Note**  
 [Prompt-to-Prompt](https://arxiv.org/abs/2208.01626) replaces *cross-attention* weights in the second generated image differently depending on the type of edit (e.g., word swap, adding a phrase, increasing or decreasing the weight of a word).  
 [Brooks et al.](https://arxiv.org/abs/2211.09800), on the other hand, replaced *self-attention* weights of the second image during the first $p$ fraction of diffusion steps and applied the same attention weight replacement strategy for all edits.  
 However, replacing self-attention weights is computationally expensive. Moreover, finding the optimal combination of parameters for the original Prompt-to-Prompt method requires extensive search for each image. For these reasons, we opted to use [ControlNet](https://arxiv.org/abs/2302.05543) (Canny) instead. The only parameter we performed a search over was `controlnet_conditioning_scale`.
@@ -109,6 +120,8 @@ The `controlnet_best` function generates a source image with Stable Diffusion an
 5. Filter images based on thresholds (`dir_sim >= 0.15`, `img_img_sim >= 0.65`, `img_cap_sim >= 0.2`).
 6. Return the image with the highest directional similarity.
 
+>**Note**  
+Our generated dataset of 1001 samples is available on Hugging Face ([here](https://huggingface.co/datasets/iamlucaconti/instructpix2pix-controlnet)).
 
 
 
@@ -179,10 +192,10 @@ The output image will be saved in the `./results` folder.
 
 ### Generated Instructions and Paired Captions
 * **Hardware constraints**:  Since the experiments were conducted on **Google Colab Pro**, which provides only **40 GB of A100 GPU memory**, it was not possible to fine-tune larger models such as **GEMMA 7B** or **GPT-3**(like in the original paper).  
-   This restriction limited the scalability of our experiments and made the final dataset less precise compared to the one presented in the original paper.
+This restriction limited the scalability of our experiments and made the final dataset less precise compared to the one presented in the original paper.
 
 * **Dataset constraints**: The dataset used for fine-tuning was **partially created manually**, which resulted in a relatively **small dataset size**.  
-   This limitation affects the quality of the fine-tuning process, reducing the model’s ability to generalize effectively.
+This limitation affects the quality of the fine-tuning process, reducing the model’s ability to generalize effectively.
 
 ### Generated Paired Images from Paired Captions
 
