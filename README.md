@@ -128,16 +128,136 @@ Our generated dataset of 1001 samples is available on Hugging Face ([here](https
 
 ## 3. Training InstructPix2Pix
 
+In the notebook **`train_instruct_pix2pix.ipynb`** we fine-tuned only the **denoising U-Net** inside Stable Diffusion v1.5 so that the model can learn to follow edit instructions (e.g., "make it look like winter") while being conditioned on:
+
+* the `original_image` (providing structural reference), and
+
+* the `edit_prompt` (guiding the transformation).
+
+This process teaches the model how to follow textual editing instructions in the style of InstructPix2Pix, without modifying the pretrained text encoder or VAE.  
+
+>**Note**  
+For the fine-tuning procedure, we followed the [official Hugging Face guide](https://github.com/huggingface/diffusers/tree/main/examples/instruct_pix2pix).
+
+---
+The main steps of the finetuning are the following:
+
+### Latent Encoding
+The edited target image is encoded into the latent space using the VAE encoder and scaled to Stable Diffusion’s representation. 
+
+```python
+latents = vae.encode(batch["edited_pixel_values"].to(weight_dtype)).latent_dist.sample()
+latents = latents * vae.config.scaling_factor
+```
+In Stable Diffusion v1.5 `vae.config.scaling_factor` is equal to 0.18215.
+
+
+### Forward Diffusion (Noise Injection)
+Gaussian noise is sampled and added to the latents according to a randomly chosen timestep. This simulates the forward diffusion process the U-Net must learn to invert.
+
+```python
+noise = torch.randn_like(latents)
+bsz = latents.shape[0]
+timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device).long()
+
+noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+```
+
+Mathematically, `noisy_latents` $x_t$ are computed as:
+$$
+x_t = \sqrt{\alpha_t}x_0 +  \sqrt{1-\alpha_t} \epsilon 
+$$
+
+where:
+
+* $x_0$ = the `edited_image`
+* $\epsilon$ = Gaussian noise ($\epsilon$)
+* $x_t$ = latents at timestep $t$ (noisy)
+* $\alpha_t$ = decay factor determined by the scheduler
+
+In simple terms, the process **mixes the image with an amount of noise controlled by the timestep**.
+
+
+### Conditioning Signals
+**Textual Conditioning:** The input instruction (`edit_prompt`) is encoded using the text encoder.  
+**Image Conditioning:** The `original_image` is also encoded into latent space, providing a structural reference.
+
+```python
+# Textual conditioning
+encoder_hidden_states = text_encoder(batch["input_ids"])[0]
+
+# Image conditioning (mode instead of Gaussian sample)
+original_image_embeds = vae.encode(batch["original_pixel_values"].to(weight_dtype)).latent_dist.mode()
+```
+
+### Conditioning Dropout (Classifier-Free Guidance)
+
+
+During training, [Brooks et al.](https://arxiv.org/abs/2211.09800) randomly set only image condition
+$c_I =\emptyset_I$ for 5% of examples, only text conditioning $c_T =\emptyset_T$ for 5% of examples,
+and both $c_I =\emptyset_I$ and $c_T =\emptyset_T$ for 5% of examples.
+So, we did the same:
+
+* Sometimes the text or image conditioning is randomly dropped (replaced with null embeddings).
+
+* This allows the model to learn to handle both conditional and unconditional cases, which is essential for classifier-free guidance during inference.
+
+```python
+if args.conditioning_dropout_prob is not None:
+    random_p = torch.rand(bsz, device=latents.device, generator=generator)
+
+    # Drop text conditioning
+    prompt_mask = (random_p < 2 * args.conditioning_dropout_prob).reshape(bsz, 1, 1)
+    null_conditioning = text_encoder(tokenize_captions([""]).to(accelerator.device))[0]
+    encoder_hidden_states = torch.where(prompt_mask, null_conditioning, encoder_hidden_states)
+
+    # Drop image conditioning
+    image_mask_dtype = original_image_embeds.dtype
+    image_mask = 1 - (
+        (random_p >= args.conditioning_dropout_prob).to(image_mask_dtype)
+        * (random_p < 3 * args.conditioning_dropout_prob).to(image_mask_dtype)
+    )
+    image_mask = image_mask.reshape(bsz, 1, 1, 1)
+    original_image_embeds = image_mask * original_image_embeds
+```
+
+
+### Concatenation
+The noisy latents are concatenated with the original image embeddings: this provides the U-Net with both the noisy edited image and the reference image.
+
+```python
+concatenated_noisy_latents = torch.cat([noisy_latents, original_image_embeds], dim=1)
+```
+
+### Prediction Target and loss Computation
+
+The U-Net predicts the added noise and then the prediction is compared with the true target (namaly the added noise $\epsilon$) using mean squared error (MSE). 
+
+```python
+model_pred = unet(concatenated_noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
+loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+```
+
+### Optimization
+* Loss is backpropagated with gradient accumulation.
+* Gradients are optionally clipped for stability.
+* Optimizer and scheduler step forward.
+* Only the U-Net weights are updated — the VAE and text encoder remain frozen.
+* Exponential Moving Average (EMA) weights of the U-Net can also be updated for smoother convergence.
+
+--- 
+
+
 Training a model like InstructPix2Pix can be demanding on your hardware. However, by enabling `gradient_checkpointing` and `mixed_precision`, it's possible to train on a **single 24GB GPU**.
 For faster training or larger batch sizes, we **strongly recommend** using GPUs with **at least 30GB of memory**.
 
-We'll train using a [small toy dataset](https://huggingface.co/datasets/fusing/instructpix2pix-1000-samples), which is a downsized version of the [original dataset](https://huggingface.co/datasets/timbrooks/instructpix2pix-clip-filtered) from the InstructPix2Pix paper.
+We trained using [our generated dataset](https://huggingface.co/datasets/iamlucaconti/instructpix2pix-controlnet).
 
 Before launching training, configure the model and dataset:
 
 ```bash
 export MODEL_NAME="stable-diffusion-v1-5/stable-diffusion-v1-5"
-export DATASET_ID="fusing/instructpix2pix-1000-samples"
+export DATASET_ID="iamlucaconti/instructpix2pix-controlnet"
 ```
 
 Use `accelerate` to start the training process with the following configuration:
