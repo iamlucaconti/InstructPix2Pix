@@ -636,6 +636,7 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
+    # NOTE: added revision
     if args.dataset_name is not None:
         # Dataset from Hugging Face hub
         dataset = load_dataset(
