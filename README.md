@@ -6,7 +6,7 @@
 
 ## Authors
 *   [**Luca Conti**](https://github.com/iamlucaconti/) (ID: 1702084)
-*   [**Daniele sabatini**](https://github.com/danilsab24/) (ID: 1890300)
+*   [**Daniele Sabatini**](https://github.com/danilsab24/) (ID: 1890300)
 
 
 ## Project aim and selected paper
@@ -164,9 +164,7 @@ noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 ```
 
 Mathematically, `noisy_latents` $x_t$ are computed as:
-$$
-x_t = \sqrt{\alpha_t}x_0 +  \sqrt{1-\alpha_t} \epsilon 
-$$
+$x_t = \sqrt{\alpha_t}x_0 +  \sqrt{1-\alpha_t} \epsilon$
 
 where:
 

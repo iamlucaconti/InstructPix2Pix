@@ -148,6 +148,14 @@ def parse_args():
             " or to a folder containing files that 🤗 Datasets can understand."
         ),
     )
+
+    parser.add_argument(
+        "--dataset_variant",
+        type=str,
+        default="main",
+        help="Variant of the dataset"
+    )
+
     parser.add_argument(
         "--dataset_config_name",
         type=str,
@@ -634,6 +642,7 @@ def main():
             args.dataset_name,
             args.dataset_config_name,
             cache_dir=args.cache_dir,
+            revision=args.dataset_variant
         )
     else:
         # Loading of a local dataset with the JSON NOTE: Edited by Luca Conti
