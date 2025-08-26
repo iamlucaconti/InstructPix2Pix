@@ -6,7 +6,7 @@
 
 ## Authors
 *   [**Luca Conti**](https://github.com/iamlucaconti/) (ID: 1702084)
-*   [**Daniele sabatini**](https://github.com/danilsab24/) (ID: 1890300)
+*   [**Daniele Sabatini**](https://github.com/danilsab24/) (ID: 1890300)
 
 
 ## Project aim and selected paper
